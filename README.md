@@ -13,13 +13,11 @@
 - ツール概要: `docs/src.md`
 
 ## テストの実行
-1. テストケースを `test/cases/*.json` に配置
+1. テストケースを `test/cases/*.json` に配置．期待する出力を `test/expected/*.out` に配置．
 2. ビルドして実行
 ```
-g++ -std=c++20 -O2 -Iinclude src/test_runner.cpp -o test_runner
-./test_runner           # 比較
-./test_runner --update  # 期待値更新
+make test
 ```
 
-# JSON parser
+## JSON specification
 https://tex2e.github.io/rfc-translater/html/rfc8259.html
