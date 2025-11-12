@@ -11,7 +11,9 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include "internal.hpp"
+
+#include "json/internal.hpp"
+#include "json/object_t.hpp"
 
 namespace json{
 
@@ -19,7 +21,7 @@ class value{
   public:
   enum class types{ Null, Boolean, Number, String, Array, Object };
   using Array_t=std::vector<value>;
-  using Object_t=internal::umap<value>;
+  using Object_t=object_t;
   using json_t=std::variant<nullptr_t, bool, double, std::string, Array_t, Object_t>;
   // constructors
   constexpr value():data_{nullptr_t{}}{}
@@ -181,6 +183,7 @@ class value{
       case internal::token_type::begin_array: return get_array(begin,end);
       case internal::token_type::begin_object: return get_object(begin,end);
       case internal::token_type::EOF_token: return nullptr_t{};
+      default: throw std::runtime_error("invalid json text");
     }
     throw std::runtime_error("invalid json text");
   }
@@ -198,6 +201,7 @@ class value{
         case internal::token_type::begin_object: res.push_back(Object_t(get_object(begin,end))); break;
         case internal::token_type::value_separator:
           throw std::runtime_error("invalid json text: too many ','");
+        default: throw std::runtime_error("invalid json text");
       }
       token=get_token(begin,end); // expect ',' or ']'
       if(token.type==internal::token_type::value_separator)
@@ -422,10 +426,7 @@ namespace detail{
       case value::types::Object: {
         os.put('{');
         const auto& obj = v.object();
-        std::vector<std::string> keys;
-        keys.reserve(obj.size());
-        for(const auto& kv : obj) keys.push_back(kv.first);
-        std::sort(keys.begin(), keys.end());
+        std::vector<std::string> keys = obj.keys_in_order();
         for(size_t i=0;i<keys.size();++i){
           if(i) os.put(',');
           const std::string& k = keys[i];
@@ -435,6 +436,77 @@ namespace detail{
           write_value(os, it->second);
         }
         os.put('}');
+      } break;
+    }
+  }
+
+  inline void write_indent(std::ostream& os, int indent_level, int indent_size){
+    for(int i=0; i<indent_level*indent_size; ++i){
+      os.put(' ');
+    }
+  }
+
+  inline void write_readable_value(std::ostream& os, const value& v, int indent_level, int indent_size){
+    switch(v.type()){
+      case value::types::Null:
+        os.write("null", 4);
+        break;
+      case value::types::Boolean:
+        if(v.boolean()) os.write("true", 4); else os.write("false", 5);
+        break;
+      case value::types::Number:
+        os << v.num();
+        break;
+      case value::types::String:
+        write_escaped_string(os, v.str());
+        break;
+      case value::types::Array: {
+        const auto& arr = v.array();
+        if(arr.empty()){
+          os.put('[');
+          os.put(']');
+        }else{
+          os.put('[');
+          os.put('\n');
+          for(size_t i=0;i<arr.size();++i){
+            if(i){
+              os.put(',');
+              os.put('\n');
+            }
+            write_indent(os, indent_level+1, indent_size);
+            write_readable_value(os, arr[i], indent_level+1, indent_size);
+          }
+          os.put('\n');
+          write_indent(os, indent_level, indent_size);
+          os.put(']');
+        }
+      } break;
+      case value::types::Object: {
+        const auto& obj = v.object();
+        if(obj.empty()){
+          os.put('{');
+          os.put('}');
+        }else{
+          os.put('{');
+          os.put('\n');
+          std::vector<std::string> keys = obj.keys_in_order();
+          for(size_t i=0;i<keys.size();++i){
+            if(i){
+              os.put(',');
+              os.put('\n');
+            }
+            write_indent(os, indent_level+1, indent_size);
+            const std::string& k = keys[i];
+            write_escaped_string(os, k);
+            os.put(':');
+            os.put(' ');
+            auto it = obj.find(k);
+            write_readable_value(os, it->second, indent_level+1, indent_size);
+          }
+          os.put('\n');
+          write_indent(os, indent_level, indent_size);
+          os.put('}');
+        }
       } break;
     }
   }
@@ -450,9 +522,18 @@ inline std::string to_string(const value& v){
   return oss.str();
 }
 
+inline std::string to_readable(const value& v, int indent_size = 2){
+  std::ostringstream oss;
+  detail::write_readable_value(oss, v, 0, indent_size);
+  return oss.str();
+}
+
 inline std::ostream& operator<<(std::ostream& os, const value& v){
   write(os, v);
   return os;
 }
 
 } // namespace json
+
+// Include object_t_impl.hpp after value is fully defined
+#include "json/object_t_impl.hpp"
