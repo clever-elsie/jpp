@@ -4,12 +4,13 @@
 
 ## 特徴
 - `json::value` による直感的な JSON 値表現（`Null/Boolean/Number/String/Array/Object`）
-- 文字列化/パース対応（`\uXXXX` サロゲートペア → UTF-8 変換）
+- オブジェクトは `json::object_t` でキーの挿入順序を保持し、直列化時もその順で出力
+- 文字列化/パース対応（`\uXXXX` サロゲートペア → UTF-8 変換）、`to_readable()` でインデント付き出力
 - 各種コンテナ・文字列型からの容易な構築（`u8` 系含む）
 - テストランナーで入出力を自動検証
 
 ## ドキュメント
-- include API: `docs/include.md`
+- include API・ファイル構成: `docs/include.md`
 - ツール概要: `docs/src.md`
 
 ## テストの実行
