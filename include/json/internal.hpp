@@ -41,7 +41,7 @@ struct token{
   token(token_type type, std::string&&word):type(type),word(std::move(word)){}
 };
 
-constexpr inline bool isws(char c){
+constexpr inline bool isws(char c)noexcept{
   return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 

@@ -158,17 +158,17 @@ class value{
   constexpr const T& get()const{
     return const_cast<value&>(*this).get<T>();
   }
-  constexpr nullptr_t null()const noexcept{return nullptr_t{};}
-  constexpr bool boolean()const noexcept{ return get<bool>(); }
-  constexpr int64_t integer()const noexcept{ return int64_t(get<double>()); }
-  constexpr double fp()const noexcept{ return get<double>(); }
-  constexpr double num()const noexcept{ return get<double>(); }
-  constexpr std::string& str()noexcept{ return get<std::string>(); }
-  constexpr const std::string& str()const noexcept{ return get<std::string>(); }
-  Array_t array()noexcept{ return get<Array_t>(); }
-  const Array_t& array()const noexcept{ return get<Array_t>(); }
-  Object_t object()noexcept{ return get<Object_t>(); }
-  const Object_t& object()const noexcept{ return get<Object_t>(); }
+  constexpr nullptr_t null()const{return get<nullptr_t>();}
+  constexpr bool boolean()const{ return get<bool>(); }
+  constexpr int64_t integer()const{ return int64_t(get<double>()); }
+  constexpr double fp()const{ return get<double>(); }
+  constexpr double num()const{ return get<double>(); }
+  constexpr std::string& str(){ return get<std::string>(); }
+  constexpr const std::string& str()const{ return get<std::string>(); }
+  Array_t& array(){ return get<Array_t>(); }
+  const Array_t& array()const{ return get<Array_t>(); }
+  Object_t& object(){ return get<Object_t>(); }
+  const Object_t& object()const{ return get<Object_t>(); }
   private:
   json_t data_;
   public:
