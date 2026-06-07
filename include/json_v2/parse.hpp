@@ -18,7 +18,7 @@ enum class token_type{
 struct token{
     token_type type;
     std::string word;
-    token()=defualt;
+    token()=default;
     template<help::string_like STR>
     token(token_type type, STR&&word):type(type), word(std::forward<STR>(word)) {}
 };
@@ -140,9 +140,9 @@ static std::expected<token,std::runtime_error> get_string(const char*&begin, con
     return token(token_type::String, std::move(res));
 }
 
-static token get_token(const char*&begin, const char* const end){
+static std::expected<token, std::runtime_error> get_token(const char*&begin, const char* const end){
     while(begin<end && isws(*begin)) ++begin;
-    if(begin==end) return {};
+    if(begin==end) return token();
     // number
     if(char c=*begin; c=='-' || ('0'<=c && c<='9'))
         return get_number(begin,end);
@@ -150,23 +150,23 @@ static token get_token(const char*&begin, const char* const end){
     else if(c=='"') return get_string(begin,end);
     // delimiter
     switch(*(begin++)){
-        case ',': return {token_type::value_separator, ""}; break;
-        case ':': return {token_type::name_separator, ""}; break;
-        case '[': return {token_type::begin_array, ""}; break;
-        case ']': return {token_type::end_array, ""}; break;
-        case '{': return {token_type::begin_object, ""}; break;
-        case '}': return {token_type::end_object, ""}; break;
+        case ',': return token(token_type::value_separator, ""); break;
+        case ':': return token(token_type::name_separator, ""); break;
+        case '[': return token(token_type::begin_array, ""); break;
+        case ']': return token(token_type::end_array, ""); break;
+        case '{': return token(token_type::begin_object, ""); break;
+        case '}': return token(token_type::end_object, ""); break;
     }
     // boolean or null
     constexpr static std::string_view words[2] = {"true", "false"};
     std::string_view s(--begin,end);
     if(s.starts_with("null")){
         begin+=4;
-        return {token_type::Null, "null"};
+        return token(token_type::Null, "null");
     }else for(const auto&word:words){
         if(s.starts_with(word)){
-            begin+=word.size();
-            return {token_type::Boolean, word.data()};
+            begin+=word.length();
+            return token(token_type::Boolean, std::string(word));
         }
     }
     return std::unexpected(std::runtime_error("invalid token"));
@@ -174,7 +174,9 @@ static token get_token(const char*&begin, const char* const end){
 
 static std::expected<array_t,std::runtime_error> get_array(const char*&begin, const char* const end){
     array_t res;
-    token token(get_token(begin,end));
+    auto token_opt = get_token(begin,end);
+    if(!token_opt) return std::unexpected(token_opt.error());
+    token token = std::move(*token_opt);
     while(true){ // 仕様では末尾のカンマは禁止だが，多分許容した方がいいので許容する.
         if(token.type==token_type::end_array) return res;
         switch(token.type){
@@ -201,41 +203,57 @@ static std::expected<array_t,std::runtime_error> get_array(const char*&begin, co
                 return std::unexpected(std::runtime_error("invalid json text: too many ','"));
             default: return std::unexpected(std::runtime_error("invalid json text"));
         }
-        token=get_token(begin,end); // expect ',' or ']'
-        if(token.type==token_type::value_separator)
-            token=get_token(begin,end); // expect next value (or ']')
-        else if(token.type==token_type::end_array)
+        auto next_token_opt = get_token(begin,end); // expect ',' or ']'
+        if(!next_token_opt) return std::unexpected(next_token_opt.error());
+        token = std::move(*next_token_opt);
+        if(token.type==token_type::value_separator) {
+            auto next_val_opt = get_token(begin,end); // expect next value (or ']')
+            if(!next_val_opt) return std::unexpected(next_val_opt.error());
+            token = std::move(*next_val_opt);
+        } else if(token.type==token_type::end_array) {
             return res;
-        else return std::unexpected(std::runtime_error("invalid json text: unexpected token"));
+        } else return std::unexpected(std::runtime_error("invalid json text: unexpected token"));
     }
     return std::unexpected(std::runtime_error("invalid json text: unclosed array"));
 }
 
 static std::expected<object_t, std::runtime_error> get_object(const char*&begin, const char* const end){
     object_t res;
-    token token(get_token(begin,end));
+    auto token_opt = get_token(begin,end);
+    if(!token_opt) return std::unexpected(token_opt.error());
+    token token = std::move(*token_opt);
     while(true){ // 末尾カンマはget_arrayと同様．
         if(token.type==token_type::end_object) return res;
         if(token.type!=token_type::String)
             return std::unexpected(std::runtime_error("invalid json text: unexpected token. lost of Object key"));
         std::string key(std::move(token.word));
-        token=get_token(begin,end); // expect ':'
+        auto next_token_opt = get_token(begin,end); // expect ':'
+        if(!next_token_opt) return std::unexpected(next_token_opt.error());
+        token = std::move(*next_token_opt);
         if(token.type!=token_type::name_separator)
             return std::unexpected(std::runtime_error("invalid json text: unexpected token. lost of ':'"));
-        res[key]=json_text(begin,end);
-        token=get_token(begin,end); // expect ',' or '}'
-        if(token.type==token_type::value_separator)
-            token=get_token(begin,end); // expect next key:value pair (or '}')
-        else if(token.type==token_type::end_object)
+        auto val_opt = json_text(begin,end);
+        if(!val_opt) return std::unexpected(val_opt.error());
+        res[key]=std::move(*val_opt);
+        auto next_delim_opt = get_token(begin,end); // expect ',' or '}'
+        if(!next_delim_opt) return std::unexpected(next_delim_opt.error());
+        token = std::move(*next_delim_opt);
+        if(token.type==token_type::value_separator) {
+            auto next_pair_opt = get_token(begin,end); // expect next key:value pair (or '}')
+            if(!next_pair_opt) return std::unexpected(next_pair_opt.error());
+            token = std::move(*next_pair_opt);
+        } else if(token.type==token_type::end_object) {
             return res;
-        else return std::unexpected(std::runtime_error("invalid json text: unexpected token"));
+        } else return std::unexpected(std::runtime_error("invalid json text: unexpected token"));
     }
     return std::unexpected(std::runtime_error("invalid json text: unclosed object"));
 }
 
 
 static std::expected<json_t, std::runtime_error> json_text(const char*&begin, const char* const end){
-    token token(get_token(begin,end));
+    auto token_opt = get_token(begin,end);
+    if(!token_opt) return std::unexpected(token_opt.error());
+    token token = std::move(*token_opt);
     switch(token.type){
         case token_type::Null: return null_t{};
         case token_type::Boolean: return token.word=="true";
@@ -255,7 +273,20 @@ static std::expected<json_t, std::runtime_error> json_text(const char*&begin, co
     }
     return std::unexpected(std::runtime_error("invalid json text"));
 }
-
-}
+};
 
 } // namespace json::parse
+
+inline std::expected<json::value, std::runtime_error> json::value::load(const char*begin, const char* const end){
+    auto r = json::parse::parser::json_text(begin,end);
+    if(!r) return std::unexpected(r.error());
+    return json::value(std::move(*r));
+}
+inline std::expected<json::value, std::runtime_error> json::value::load(const std::string&s){
+    const char*begin=s.data();
+    return json::value::load(begin,begin+s.size());
+}
+inline std::expected<json::value, std::runtime_error> json::value::load(const std::string_view&s){
+    const char*begin=s.data();
+    return json::value::load(begin,begin+s.size());
+}

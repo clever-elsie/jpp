@@ -1,6 +1,11 @@
-## include/ API 概要
+## include/ API 概要 (Version 1)
 
 このディレクトリには JSON 値クラス `json::value`、オブジェクト用の `json::object_t`、および内部ユーティリティが含まれます。
+
+### 前提条件 (Prerequisites)
+- **C++ 標準規格**: **C++20 以上**が必要です。
+  - コンセプト (`std::floating_point` などの `requires` 句) が随所で使用されています。
+- **コンパイラ**: C++20 を十分にサポートするコンパイラ (GCC 10+, Clang 10+, MSVC 19.29+ など) が必要です。
 
 ### ファイル構成
 - **json.hpp** — メインエントリ。`value` クラス、直列化・パース API。末尾で `json/object_t_impl.hpp` をインクルード。
@@ -25,8 +30,13 @@
 ### 情報取得とアクセス
 - `types type() const` / `bool is<T>() const` / `bool is(types t) const`
 - `size_t size() const`, `std::vector<std::string> keys() const`
-- インデクサ: `value& operator[](size_t)`, `value& operator[](string_like)`（const 版あり）
-- `get<T>()`, `null()`, `boolean()`, `integer()`（`int64_t`）, `num()` / `fp()`, `str()`, `array()`, `object()`
+- インデクサ:
+  - `value& operator[](size_t index)` （const 版あり）
+  - キー指定: `value& operator[](KeyType&& key)` （const 版あり）
+    - ※ライブラリ内部ではテンプレートで実装されていますが、ユーザー側からは `std::string`, `std::string_view`, `const char*` の3つの型に対するコピーおよびムーブのオーバーロードが存在するものとみなして問題ありません。
+- `get<T>()`
+- `null()`, `boolean()`, `integer()`（`int64_t`）, `num()` / `fp()`, `str()`, `array()`, `object()`
+  - ※型が不一致の場合には `std::runtime_error` 例外がスローされます。
 
 ### 変更・代入
 - `clear()`, `swap(value&)`
@@ -42,11 +52,10 @@
 ### object_t の補足
 - キーの挿入順序を保持し、`keys_in_order()` でその順のキーリストを取得可能。
 - 直列化（`write` / `to_string` / `to_readable`）ではこの挿入順でメンバが出力される。
-- `internal::is_string_like` を満たす型でキー指定可能（`std::string`, `std::string_view`, `const char*` 等）。
+- キー指定には `std::string`, `std::string_view`, `const char*` （コピー/ムーブ）が使用可能です。
 
 ### 内部（internal.hpp 抜粋）
 - `internal::token` と `internal::token_type`
 - ハッシュ・比較（透過型）: `internal::hash`, `internal::equal`
 - マップ型: `internal::umap<T>` ≡ `std::unordered_map<std::string, T, hash, equal>`
-- コンセプト: `internal::is_string_like`（`std::string`, `std::string_view`, `const char*` 等）
 - ユーティリティ: `internal::isws(char)`

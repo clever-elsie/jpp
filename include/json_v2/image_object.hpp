@@ -49,6 +49,8 @@ class object_map_t{
     using const_reverse_iterator = iter<Self, true, true>;
 
     private:
+    template<class U, bool C, bool R>
+    friend struct iter;
     size_t top_id; // 現在未挿入の最小のid
     umap_t umap; // 実際にデータを保持する
     imap_t imap; // idのマッピングを保持する
@@ -122,27 +124,27 @@ class object_map_t{
         auto itr = umap.find(key);
         if(itr == umap.end()){
             auto [jtr, inserted] = umap.emplace(std::forward<S>(key), KV_t(top_id, T()));
-            imap.emplace(top_id++, jtr);
+            imap.insert({top_id++, jtr});
             itr = jtr;
         }
         return itr->second.value;
     }
 
     template<help::string_like S>
-    auto at(S&& key) -> std::expected<mapped_type&, std::out_of_range>
+    auto at(S&& key) -> std::expected<ref_t<mapped_type>, std::out_of_range>
     {
         auto itr = umap.find(key);
         if(itr == umap.end())
             return std::unexpected(std::out_of_range("out of range at json::data_structure::object_map_t::at."));
-        return itr->second.value;
+        return ref_t<mapped_type>(itr->second.value);
     }
 
     template<help::string_like S>
-    std::optional<mapped_type&> get(S&& key){
+    std::optional<ref_t<mapped_type>> get(S&& key){
         auto itr = umap.find(key);
         if(itr==umap.end())
             return std::nullopt;
-        return itr->second.value;
+        return ref_t<mapped_type>(itr->second.value);
     }
 
 
@@ -156,7 +158,7 @@ class object_map_t{
     template<class Value_t>
         requires std::same_as<std::decay_t<Value_t>, value_type>
     std::pair<iterator, bool> insert(Value_t&& value){
-        auto [itr, inserted] = emplace(value.first, value.seconds);
+        auto [itr, inserted] = emplace(value.first, value.second);
         return {iterator(this, imap.order_of_key(itr->second.key)), inserted};
     }
 
@@ -178,7 +180,7 @@ class object_map_t{
         auto itr=umap.find(s);
         if(itr==umap.end()){
             auto [itr, inserted] = umap.emplace(std::forward<S>(s), KV_t(top_id, mapped_type(std::forward<Args>(args)...)));
-            imap.emplace(top_id++, itr);
+            imap.insert({top_id++, itr});
             return {iterator(this, imap.order_of_key(itr->second.key)), true};
         }
         itr->second.value = mapped_type(std::forward<Args>(args)...);
@@ -190,7 +192,7 @@ class object_map_t{
         auto itr=umap.find(s);
         if(itr==umap.end()){
             auto [itr, inserted] = umap.emplace(std::forward<S>(s), KV_t(top_id, mapped_type(std::forward<Args>(args)...)));
-            imap.emplace(top_id++, itr);
+            imap.insert({top_id++, itr});
             return {iterator(this, imap.order_of_key(itr->second.key)), true};
         }
         return {iterator(this,imap.order_of_key(itr->second.key)),false};
@@ -205,12 +207,15 @@ class object_map_t{
         return this->erase(iterator(this, pos.idx));
     }
     iterator erase(iterator pos){
-        auto itr = imap.find(pos);
-        if(itr == imap.end()) return this->end();
-        umap.erase(itr->second);
-        imap.erase(itr);
+        if(pos.idx >= umap.size()) return this->end();
+        auto it_imap = imap.find_by_order(pos.idx);
+        if(it_imap == imap.end()) return this->end();
+        auto it_umap = it_imap->second;
+        size_t id = it_umap->second.key;
+        umap.erase(it_umap);
+        imap.erase(id);
         if(pos.idx>=umap.size()) return this->end();
-        return pos; // 前の要素が消えたのだから次の要素は同じidxを差す自分自身
+        return pos;
     }
     template<help::string_like key_t>
     size_type erase(const key_t& key){
@@ -277,18 +282,16 @@ class object_map_t{
     template<help::string_like key_t>
     std::pair<iterator, iterator> equal_range(const key_t& key) {
         auto itr = this->find(key);
-        if(itr==umap.end()) return this->end();
-        iterator it(this, imap.order_of_key(itr->second.key));
-        iterator et(this, it.idx>=this->size()?this->end().idx:it.idx+1);
-        return {it,et};
+        if(itr==this->end()) return {this->end(), this->end()};
+        iterator et(this, itr.idx>=this->size()?this->end().idx:itr.idx+1);
+        return {itr, et};
     }
 
     std::pair<const_iterator, const_iterator> equal_range(const key_type& key) const {
         auto itr = this->find(key);
-        if(itr==umap.end()) return this->end();
-        const_iterator it(this, imap.order_of_key(itr->second.key));
-        const_iterator et(this, it.idx>=this->size()?this->end().idx:it.idx+1);
-        return {it,et};
+        if(itr==this->end()) return {this->end(), this->end()};
+        const_iterator et(this, itr.idx>=this->size()?this->end().idx:itr.idx+1);
+        return {itr, et};
     }
 
     // Iterators

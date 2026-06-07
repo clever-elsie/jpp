@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <system_error>
 
-#include "../include/json.hpp"
+#include "../include/json_v2.hpp"
 
 namespace fs = std::filesystem;
 
@@ -68,7 +68,9 @@ int main(int argc, char** argv){
 
     try{
       const std::string in = read_all(case_path);
-      const json::value v = json::value::load(in);
+      auto v_opt = json::value::load(in);
+      if(!v_opt) throw v_opt.error();
+      const json::value v = std::move(*v_opt);
       const std::string actual = json::to_string(v);
 
       write_all(out_path, actual);

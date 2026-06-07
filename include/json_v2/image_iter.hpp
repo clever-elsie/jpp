@@ -1,16 +1,14 @@
 #pragma once
 #include <cstddef>
 #include <stdexcept>
+#include <cassert>
 #include <concepts>
 #include <type_traits>
 
 namespace json::data_structure{
 
-// T.imap.find_by_order(size_t)->second.valueがアクセスの戻り値型となる契約
+// T.imap.find_by_order(size_t)->second->second.valueがアクセスの戻り値型となる契約
 template<class T, bool is_const, bool is_reverse>
-    requires requires(T x){
-        x.imap.find_by_order(size_t{0})->second.value;
-    }
 struct iter{
     using difference_type = std::ptrdiff_t;
     iter()=delete;
@@ -21,16 +19,16 @@ struct iter{
     iter& operator=(const iter&other)=default;
     iter& operator=(iter&&other)=default;
     auto& operator*(){
-        return ptr->imap.find_by_order(idx)->second.value;
+        return ptr->imap.find_by_order(idx)->second->second.value;
     }
     const auto& operator*()const{
-        return ptr->imap.find_by_order(idx)->second.value;
+        return ptr->imap.find_by_order(idx)->second->second.value;
     }
     auto operator->(){
-        return &(ptr->imap.find_by_order(idx)->second.value);
+        return &(ptr->imap.find_by_order(idx)->second->second.value);
     }
     const auto operator->()const{
-        return &(ptr->imap.find_by_order(idx)->second.value);
+        return &(ptr->imap.find_by_order(idx)->second->second.value);
     }
     iter& operator++(){
         ++idx;
@@ -76,7 +74,7 @@ struct iter{
     }
     template<bool is_const1, bool is_reverse1>
     auto operator<=>(const iter<T,is_const1,is_reverse1>&itr)const{
-        if(ptr!=itr.ptr) throw std::domain_error("iter is not belonging to the same object_map_t");
+        assert(ptr==itr.ptr && "iter is not belonging to the same object_map_t");
         const size_t i1 = is_reverse?ptr->size()-idx : idx;
         const size_t i2 = is_reverse1?itr.ptr->size()-itr.idx : itr.idx;
         return i1<=>i2;
@@ -85,7 +83,7 @@ struct iter{
     using pp_t = std::conditional_t<is_const, const T*, T*>;
     size_t idx;
     pp_t ptr;
-    template<class T>
+    template<class U>
     friend class object_map_t;
 };
 

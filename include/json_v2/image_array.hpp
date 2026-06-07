@@ -20,29 +20,29 @@ struct array_t:public std::vector<T>{
     using allocator_type         = std::vector<T>::allocator_type;
     using pointer                = std::vector<T>::pointer;
     using const_pointer          = std::vector<T>::const_pointer;
-    std::expected<reference, std::out_of_range>
+    std::expected<ref_t<value_type>, std::out_of_range>
     at(size_type n){
         if(n>=this->size())
             return std::unexpected(std::out_of_range("json::data_structure::array_t::at out_of_range"));
-        return (*this)[n];
+        return ref_t<value_type>((*this)[n]);
     }
-    std::expected<const_reference, std::out_of_range>
+    std::expected<ref_t<const value_type>, std::out_of_range>
     at(size_type n)const{
         if(n>=this->size())
             return std::unexpected(std::out_of_range("json::data_structure::array_t::at out_of_range"));
-        return (*this)[n];
+        return ref_t<const value_type>((*this)[n]);
     }
-    std::optional<reference>
+    std::optional<ref_t<value_type>>
     get(size_t n){
         if(n>=this->size())
             return std::nullopt;
-        return (*this)[n];
+        return ref_t<value_type>((*this)[n]);
     }
-    std::optional<const_reference>
+    std::optional<ref_t<const value_type>>
     get(size_t n)const{
         if(n>=this->size())
             return std::nullopt;
-        return (*this)[n];
+        return ref_t<const value_type>((*this)[n]);
     }
 };
 

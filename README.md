@@ -10,8 +10,10 @@
 - テストランナーで入出力を自動検証
 
 ## ドキュメント
-- include API・ファイル構成: `docs/include.md`
-- ツール概要: `docs/src.md`
+- include API・ファイル構成:
+  - [Version 1 (例外使用版)](file:///home/elsie/lab/jpp/docs/include.md)
+  - [Version 2 (例外排除・std::expected使用版)](file:///home/elsie/lab/jpp/docs/include_v2.md)
+- ツール概要: [src.md](file:///home/elsie/lab/jpp/docs/src.md)
 
 ## テストの実行
 1. テストケースを `test/cases/*.json` に配置．期待する出力を `test/expected/*.out` に配置．

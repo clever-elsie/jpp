@@ -13,6 +13,27 @@
 #include <type_traits>
 
 #include <stdexcept>
+#include <cassert>
+
+namespace json {
+
+template<class T>
+class ref_t {
+    T* ptr_ = nullptr;
+public:
+    constexpr ref_t() noexcept = default;
+    constexpr ref_t(T& val) noexcept : ptr_(&val) {}
+    constexpr ref_t(const ref_t&) noexcept = default;
+    constexpr ref_t& operator=(const ref_t&) noexcept = default;
+
+    constexpr T& get() const noexcept { return *ptr_; }
+    constexpr operator T&() const noexcept { return *ptr_; }
+    constexpr T& operator*() const noexcept { return *ptr_; }
+    constexpr T* operator->() const noexcept { return ptr_; }
+};
+
+} // namespace json
+
 
 #include "./image_array.hpp"
 #include "./image_object.hpp"
@@ -116,17 +137,9 @@ class value{
         requires (std::is_constructible_v<value,T>)
         constexpr value(const std::vector<std::pair<std::string,T>,Alloc>& v):data_{Object_t(v.begin(),v.end())}{}
     // load
-    constexpr static value load(const char*begin, const char* const end){
-        return value(json_text(begin,end));
-    }
-    constexpr static value load(const std::string&s){
-        const char*begin=s.data();
-        return value(json_text(begin,begin+s.size()));
-    }
-    constexpr static value load(const std::string_view&s){
-        const char*begin=s.data();
-        return value(json_text(begin,begin+s.size()));
-    }
+    static std::expected<value, std::runtime_error> load(const char*begin, const char* const end);
+    static std::expected<value, std::runtime_error> load(const std::string&s);
+    static std::expected<value, std::runtime_error> load(const std::string_view&s);
     // destructor
     constexpr ~value()=default;
     // assignment operators
@@ -146,57 +159,147 @@ class value{
     constexpr bool is()const noexcept{ return std::holds_alternative<T>(data_); }
     constexpr size_t size()const noexcept{
         switch(type()){
-            case types::Array: return std::get<Array_t>(data_).size();
-            case types::Object: return std::get<Object_t>(data_).size();
+            case types::Array: return std::get<array_t>(data_).size();
+            case types::Object: return std::get<object_t>(data_).size();
             default: return 1;
         }
     }
-    std::vector<std::string> keys()const{
-        if(!is<object_t>()) throw std::runtime_error("value is not an object");
-        std::vector<std::string> keys;
-        for(const auto&[key,value]:std::get<object_t>(data_)) keys.push_back(key);
-        return keys;
+    std::expected<std::vector<std::string>, std::domain_error> keys()const{
+        if(!is<object_t>()) return std::unexpected(std::domain_error("value is not an object"));
+        return std::get<object_t>(data_).keys_in_order();
     }
     // change
     constexpr void clear()noexcept{ data_=nullptr_t{}; }
     constexpr void swap(value&other)noexcept{ std::swap(data_,other.data_); }
     // access
     constexpr value& operator[](size_t index){
-        if(!is<Array_t>()) throw std::runtime_error("value is not an array");
-        return std::get<Array_t>(data_)[index];
+        if(is<null_t>()) {
+            data_ = array_t{};
+        }
+        assert(is<array_t>());
+        auto& arr = std::get<array_t>(data_);
+        if(index >= arr.size()) {
+            arr.resize(index + 1);
+        }
+        return arr[index];
     }
     constexpr const value& operator[](size_t index)const{
-        return const_cast<value&>(*this)[index];
+        assert(is<array_t>());
+        return std::get<array_t>(data_)[index];
     }
-    template<internal::is_string_like T>
+    template<help::string_like T>
     constexpr value& operator[](T&&key){
-        if(!is<Object_t>()) throw std::runtime_error("value is not an object");
-        return std::get<Object_t>(data_)[std::forward<T>(key)];
+        if(is<null_t>()) {
+            data_ = object_t{};
+        }
+        assert(is<object_t>());
+        return std::get<object_t>(data_)[std::forward<T>(key)];
     }
-    template<internal::is_string_like T>
+    template<help::string_like T>
     constexpr const value& operator[](T&&key)const{
-        return const_cast<value&>(*this)[std::forward<T>(key)];
+        assert(is<object_t>());
+        return std::get<object_t>(data_)[std::forward<T>(key)];
+    }
+    
+    // at
+    constexpr std::expected<ref_t<value>, std::out_of_range> at(size_t index) {
+        if(!is<array_t>()) return std::unexpected(std::out_of_range("value is not array"));
+        auto& arr = std::get<array_t>(data_);
+        if(index >= arr.size()) return std::unexpected(std::out_of_range("index out of range"));
+        return ref_t<value>(arr[index]);
+    }
+    constexpr std::expected<ref_t<const value>, std::out_of_range> at(size_t index) const {
+        if(!is<array_t>()) return std::unexpected(std::out_of_range("value is not array"));
+        const auto& arr = std::get<array_t>(data_);
+        if(index >= arr.size()) return std::unexpected(std::out_of_range("index out of range"));
+        return ref_t<const value>(arr[index]);
+    }
+    template<help::string_like T>
+    constexpr std::expected<ref_t<value>, std::out_of_range> at(T&& key) {
+        if(!is<object_t>()) return std::unexpected(std::out_of_range("value is not object"));
+        auto& obj = std::get<object_t>(data_);
+        auto it = obj.find(key);
+        if(it == obj.end()) return std::unexpected(std::out_of_range("key not found"));
+        return ref_t<value>(*it);
+    }
+    template<help::string_like T>
+    constexpr std::expected<ref_t<const value>, std::out_of_range> at(T&& key) const {
+        if(!is<object_t>()) return std::unexpected(std::out_of_range("value is not object"));
+        const auto& obj = std::get<object_t>(data_);
+        auto it = obj.find(key);
+        if(it == obj.end()) return std::unexpected(std::out_of_range("key not found"));
+        return ref_t<const value>(*it);
+    }
+
+    template<class T>
+    constexpr std::expected<ref_t<T>, std::domain_error> get(){
+        if(!is<T>()) return std::unexpected(std::domain_error("value is not of type " + std::string(typeid(T).name())));
+        return ref_t<T>(std::get<T>(data_));
     }
     template<class T>
-    constexpr T& get(){
-        if(!is<T>()) throw std::runtime_error("value is not of type " + std::string(typeid(T).name()));
-        return std::get<T>(data_);
+    constexpr std::expected<ref_t<const T>, std::domain_error> get()const{
+        if(!is<T>()) return std::unexpected(std::domain_error("value is not of type " + std::string(typeid(T).name())));
+        return ref_t<const T>(std::get<T>(data_));
     }
-    template<class T>
-    constexpr const T& get()const{
-        return const_cast<value&>(*this).get<T>();
+
+    // 安全なアクセス (expected返却)
+    constexpr std::expected<std::nullptr_t, std::domain_error> null() const {
+        if (!is<null_t>()) return std::unexpected(std::domain_error("value is not null"));
+        return nullptr;
     }
-    constexpr nullptr_t null()const{return get<null_t>();}
-    constexpr bool boolean()const{ return get<bool_t>(); }
-    constexpr int64_t sint()const{ return get<int_t>(); }
-    constexpr uint64_t uint()const{ return get<uint_t>(); }
-    constexpr double fp()const{ return get<float_t>(); }
-    constexpr std::string& str(){ return get<str_t>(); }
-    constexpr const std::string& str()const{ return get<str_t>(); }
-    Array_t& array(){ return get<array_t>(); }
-    const Array_t& array()const{ return get<array_t>(); }
-    Object_t& object(){ return get<object_t>(); }
-    const Object_t& object()const{ return get<object_t>(); }
+    constexpr std::expected<bool, std::domain_error> boolean() const {
+        if (!is<bool_t>()) return std::unexpected(std::domain_error("value is not boolean"));
+        return std::get<bool_t>(data_);
+    }
+    constexpr std::expected<int64_t, std::domain_error> sint() const {
+        if (!is<int_t>()) return std::unexpected(std::domain_error("value is not integer"));
+        return std::get<int_t>(data_);
+    }
+    constexpr std::expected<uint64_t, std::domain_error> uint() const {
+        if (!is<uint_t>()) return std::unexpected(std::domain_error("value is not unsigned integer"));
+        return std::get<uint_t>(data_);
+    }
+    constexpr std::expected<double, std::domain_error> fp() const {
+        if (!is<float_t>()) return std::unexpected(std::domain_error("value is not float"));
+        return std::get<float_t>(data_);
+    }
+    constexpr std::expected<ref_t<std::string>, std::domain_error> str() {
+        if (!is<str_t>()) return std::unexpected(std::domain_error("value is not string"));
+        return ref_t<std::string>(std::get<str_t>(data_));
+    }
+    constexpr std::expected<ref_t<const std::string>, std::domain_error> str() const {
+        if (!is<str_t>()) return std::unexpected(std::domain_error("value is not string"));
+        return ref_t<const std::string>(std::get<str_t>(data_));
+    }
+    constexpr std::expected<ref_t<array_t>, std::domain_error> array() {
+        if (!is<array_t>()) return std::unexpected(std::domain_error("value is not array"));
+        return ref_t<array_t>(std::get<array_t>(data_));
+    }
+    constexpr std::expected<ref_t<const array_t>, std::domain_error> array() const {
+        if (!is<array_t>()) return std::unexpected(std::domain_error("value is not array"));
+        return ref_t<const array_t>(std::get<array_t>(data_));
+    }
+    constexpr std::expected<ref_t<object_t>, std::domain_error> object() {
+        if (!is<object_t>()) return std::unexpected(std::domain_error("value is not object"));
+        return ref_t<object_t>(std::get<object_t>(data_));
+    }
+    constexpr std::expected<ref_t<const object_t>, std::domain_error> object() const {
+        if (!is<object_t>()) return std::unexpected(std::domain_error("value is not object"));
+        return ref_t<const object_t>(std::get<object_t>(data_));
+    }
+
+    // 契約アクセス (大文字、assert/直接返却)
+    constexpr std::nullptr_t Null() const { assert(is<null_t>()); return nullptr; }
+    constexpr bool Boolean() const { assert(is<bool_t>()); return std::get<bool_t>(data_); }
+    constexpr int64_t Sint() const { assert(is<int_t>()); return std::get<int_t>(data_); }
+    constexpr uint64_t Uint() const { assert(is<uint_t>()); return std::get<uint_t>(data_); }
+    constexpr double Fp() const { assert(is<float_t>()); return std::get<float_t>(data_); }
+    constexpr std::string& Str() { assert(is<str_t>()); return std::get<str_t>(data_); }
+    constexpr const std::string& Str() const { assert(is<str_t>()); return std::get<str_t>(data_); }
+    constexpr array_t& Array() { assert(is<array_t>()); return std::get<array_t>(data_); }
+    constexpr const array_t& Array() const { assert(is<array_t>()); return std::get<array_t>(data_); }
+    constexpr object_t& Object() { assert(is<object_t>()); return std::get<object_t>(data_); }
+    constexpr const object_t& Object() const { assert(is<object_t>()); return std::get<object_t>(data_); }
 
     private:
     json_t data_;
@@ -207,7 +310,7 @@ using bool_t   = value::bool_t;
 using int_t    = value::int_t;
 using uint_t   = value::uint_t;
 using float_t  = value::float_t;
-using str_t    = value::float_t;
+using str_t    = value::str_t;
 using array_t  = value::array_t;
 using object_t = value::object_t;
 using json_t   = value::json_t;

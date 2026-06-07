@@ -37,17 +37,17 @@ inline void write_value(std::ostream& os, const value& v){
     switch(v.type()){
         case types::Null: os.write("null", 4); break;
         case types::Bool:
-            if(v.boolean()) os.write("true", 4); else os.write("false", 5);
+            if(v.Boolean()) os.write("true", 4); else os.write("false", 5);
             break;
-        case types::Int: os << v.sint(); break;
-        case types::Uint: os << v.uint(); break;
-        case types::Float: os << v.fp(); break;
+        case types::Int: os << v.Sint(); break;
+        case types::Uint: os << v.Uint(); break;
+        case types::Float: os << v.Fp(); break;
         case types::Str:
-            write_escaped_string(os, v.str());
+            write_escaped_string(os, v.Str());
             break;
         case types::Array: {
             os.put('[');
-            const auto& arr = v.array();
+            const auto& arr = v.Array();
             for(size_t i=0;i<arr.size();++i){
                 if(i) os.put(',');
                 write_value(os, arr[i]);
@@ -56,7 +56,7 @@ inline void write_value(std::ostream& os, const value& v){
         } break;
         case types::Object: {
             os.put('{');
-            const auto& obj = v.object();
+            const auto& obj = v.Object();
             std::vector<std::string> keys = obj.keys_in_order();
             for(size_t i=0;i<keys.size();++i){
                 if(i) os.put(',');
@@ -64,7 +64,7 @@ inline void write_value(std::ostream& os, const value& v){
                 write_escaped_string(os, k);
                 os.put(':');
                 auto it = obj.find(k);
-                write_value(os, it->second);
+                write_value(os, *it);
             }
             os.put('}');
         } break;
@@ -83,16 +83,16 @@ inline void write_readable_value(std::ostream& os, const value& v, int indent_le
             os.write("null", 4);
             break;
         case types::Bool:
-            if(v.boolean()) os.write("true", 4); else os.write("false", 5);
+            if(v.Boolean()) os.write("true", 4); else os.write("false", 5);
             break;
-        case types::Int: os << v.sint(); break;
-        case types::Uint: os << v.uint(); break;
-        case types::Float: os << v.fp(); break;
+        case types::Int: os << v.Sint(); break;
+        case types::Uint: os << v.Uint(); break;
+        case types::Float: os << v.Fp(); break;
         case types::Str:
-            write_escaped_string(os, v.str());
+            write_escaped_string(os, v.Str());
             break;
         case types::Array: {
-            const auto& arr = v.array();
+            const auto& arr = v.Array();
             if(arr.empty()){
                 os.put('[');
                 os.put(']');
@@ -113,7 +113,7 @@ inline void write_readable_value(std::ostream& os, const value& v, int indent_le
             }
         } break;
         case types::Object: {
-            const auto& obj = v.object();
+            const auto& obj = v.Object();
             if(obj.empty()){
                 os.put('{');
                 os.put('}');
@@ -132,7 +132,7 @@ inline void write_readable_value(std::ostream& os, const value& v, int indent_le
                     os.put(':');
                     os.put(' ');
                     auto it = obj.find(k);
-                    write_readable_value(os, it->second, indent_level+1, indent_size);
+                    write_readable_value(os, *it, indent_level+1, indent_size);
                 }
                 os.put('\n');
                 write_indent(os, indent_level, indent_size);
